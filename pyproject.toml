@@ -1,0 +1,9 @@
+[project]
+name = "product-card-assistant"
+version = "1.0.0"
+description = "Черновики карточек B2B-товаров (КИП) с помощью LLM без выдуманных характеристик"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

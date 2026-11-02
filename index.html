@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Карточка товара: черновик</title>
+<style>
+:root{--bg:#f4f5f2;--panel:#fff;--ink:#1c211d;--muted:#5d665f;--line:#d8dcd5;--accent:#1f5f4a;--accent-ink:#fff;--warn-bg:#fdf3dc;--warn:#6f4d00;--err-bg:#fbe6e3;--err:#8d2318;--ok-bg:#e2f2ea;--ok:#17553f;--code:#eef0ec}
+@media (prefers-color-scheme:dark){:root{--bg:#141714;--panel:#1d211d;--ink:#e8ebe6;--muted:#a2aba3;--line:#343a34;--accent:#6fc7a5;--accent-ink:#0d1d17;--warn-bg:#3a2f12;--warn:#f0d48a;--err-bg:#40201c;--err:#f4b1a8;--ok-bg:#16352a;--ok:#9fe0c5;--code:#262b26}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 24px 4px;max-width:1360px;margin:auto}
+h1{font-size:21px;margin:0}
+header p{margin:2px 0 0;color:var(--muted)}
+main{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:16px;padding:16px 24px 40px;max-width:1360px;margin:auto;align-items:start}
+@media (max-width:900px){main{grid-template-columns:minmax(0,1fr);padding:16px}header{padding:16px 16px 0}}
+section.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-weight:600;font-size:13px;margin:12px 0 4px}
+input,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit}
+textarea{resize:vertical;min-height:110px}
+textarea.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-height:340px}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;padding:9px 18px}
+button:disabled{opacity:.6;cursor:progress}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted)}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 36px;gap:6px;margin-bottom:6px}
+.row button{padding:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center}
+.notice{padding:10px 12px;border-radius:6px;margin:0 0 12px}
+.notice ul{margin:4px 0 0;padding-left:18px}
+.warn{background:var(--warn-bg);color:var(--warn)}.err{background:var(--err-bg);color:var(--err)}.ok{background:var(--ok-bg);color:var(--ok)}
+.block{border-top:1px solid var(--line);padding:12px 0}
+.block-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.block-head h3{font-size:14px;margin:0}
+.count{color:var(--muted);font-weight:400;font-size:13px}
+.text{white-space:pre-wrap;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{font-size:13px;color:var(--muted);font-weight:600}
+.absent{color:var(--err);font-style:italic}
+.src{color:var(--muted);font-size:12px}
+ul.plain{margin:0;padding-left:18px}
+pre{background:var(--code);padding:12px;border-radius:6px;overflow:auto;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.empty{color:var(--muted);padding:32px 0;text-align:center}
+.meta{color:var(--muted);font-size:12px;margin-top:10px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>Черновик карточки товара</h1>
+  <p>Значения характеристик берутся только из ваших данных. Модель: {{ model }}</p>
+</header>
+<main>
+<section class="panel" aria-label="Данные о товаре">
+  {% if not llm_configured %}
+  <p class="notice warn">Не задан ANTHROPIC_API_KEY. Проверка данных работает, а для создания карточки укажите ключ в файле .env и перезапустите сервис.</p>
+  {% endif %}
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-form" aria-selected="true">Форма</button>
+    <button type="button" role="tab" id="tab-json" aria-selected="false">JSON</button>
+  </div>
+  <div id="pane-form">
+    <label for="f-name">Название товара *</label>
+    <input id="f-name" autocomplete="off">
+    <label for="f-manufacturer">Производитель</label>
+    <input id="f-manufacturer" autocomplete="off">
+    <label>Характеристики</label>
+    <div id="spec-rows"></div>
+    <button type="button" id="add-spec">Добавить характеристику</button>
+    <label for="f-description">Описание или фрагмент паспорта</label>
+    <textarea id="f-description"></textarea>
+  </div>
+  <div id="pane-json" hidden>
+    <label for="f-json">Данные одного товара</label>
+    <textarea id="f-json" class="code" spellcheck="false"></textarea>
+  </div>
+  <div class="actions">
+    <button type="button" class="primary" id="generate">Создать карточку</button>
+    <button type="button" id="check">Проверить данные</button>
+    <button type="button" id="example">Подставить пример</button>
+  </div>
+</section>
+<section class="panel" aria-label="Результат" aria-live="polite">
+  <div id="result"><p class="empty">Здесь появится черновик карточки</p></div>
+</section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const EXAMPLE = {
+  name: "Манометр показывающий DM 02",
+  manufacturer: "Манотомь",
+  specs: {"диапазон измерений": "0–1,6 МПа", "класс точности": "1,5", "присоединение": "G1/2", "диаметр корпуса": "100 мм"},
+  description: "Прибор предназначен для измерения избыточного давления..."
+};
+let mode = "form";
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "class") node.className = value; else node[key] = value;
+  }
+  node.append(...children);
+  return node;
+}
+
+function addRow(name = "", value = "") {
+  const remove = el("button", {type: "button", textContent: "×", title: "Удалить", ariaLabel: "Удалить характеристику"});
+  const row = el("div", {class: "row"},
+    el("input", {placeholder: "Название", value: name, ariaLabel: "Название характеристики"}),
+    el("input", {placeholder: "Значение", value, ariaLabel: "Значение характеристики"}),
+    remove);
+  remove.onclick = () => row.remove();
+  $("spec-rows").append(row);
+}
+
+function formToProduct() {
+  const specs = {};
+  for (const row of $("spec-rows").children) {
+    const [name, value] = row.querySelectorAll("input");
+    if (name.value.trim()) specs[name.value.trim()] = value.value;
+  }
+  return {name: $("f-name").value, manufacturer: $("f-manufacturer").value, specs, description: $("f-description").value};
+}
+
+function fillForm(product) {
+  $("f-name").value = product.name ?? "";
+  $("f-manufacturer").value = product.manufacturer ?? "";
+  $("f-description").value = product.description ?? "";
+  $("spec-rows").replaceChildren();
+  for (const [name, value] of Object.entries(product.specs ?? {})) addRow(name, String(value ?? ""));
+  if (!$("spec-rows").children.length) addRow();
+}
+
+function setMode(next) {
+  if (next === mode) return;
+  if (next === "json") {
+    $("f-json").value = JSON.stringify(formToProduct(), null, 2);
+  } else {
+    try {
+      const product = JSON.parse($("f-json").value || "{}");
+      if (product === null || typeof product !== "object" || Array.isArray(product)) throw new Error();
+      fillForm(product);
+    } catch {
+      showError({message: "Исправьте JSON, чтобы перенести его в форму", details: []});
+      return;
+    }
+  }
+  mode = next;
+  $("pane-form").hidden = mode !== "form";
+  $("pane-json").hidden = mode !== "json";
+  $("tab-form").setAttribute("aria-selected", mode === "form");
+  $("tab-json").setAttribute("aria-selected", mode === "json");
+}
+
+function copyButton(getText, label = "Копировать") {
+  const button = el("button", {type: "button", textContent: label});
+  button.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(getText());
+      button.textContent = "Скопировано";
+    } catch {
+      button.textContent = "Не удалось скопировать";
+    }
+    setTimeout(() => { button.textContent = label; }, 1500);
+  };
+  return button;
+}
+
+function block(title, count, copyText, body) {
+  const heading = el("h3", {}, title);
+  if (count) heading.append(" ", el("span", {class: "count", textContent: count}));
+  return el("div", {class: "block"}, el("div", {class: "block-head"}, heading, copyButton(() => copyText)), body);
+}
+
+function list(items) {
+  return el("ul", {class: "plain"}, ...items.map((item) => el("li", {textContent: item})));
+}
+
+function showError(error) {
+  const box = el("div", {class: "notice err"}, el("strong", {textContent: error.message}));
+  if (error.details?.length) {
+    box.append(el("ul", {}, ...error.details.map((d) => el("li", {textContent: `${d.field}: ${d.message}`}))));
+  }
+  $("result").replaceChildren(box);
+}
+
+function issuesNotice(missing, issues) {
+  const errors = issues.filter((i) => i.severity === "error");
+  const warnings = issues.filter((i) => i.severity !== "error");
+  const nodes = [];
+  if (errors.length) {
+    nodes.push(el("div", {class: "notice err"}, el("strong", {textContent: "Нужно исправить перед публикацией"}), list(errors.map((i) => `${i.field}: ${i.message}`))));
+  }
+  const items = [...(missing.length ? ["Нет данных: " + missing.join(", ")] : []), ...warnings.map((i) => i.message)];
+  if (items.length) {
+    nodes.push(el("div", {class: "notice warn"}, el("strong", {textContent: "Нужно уточнить"}), list(items)));
+  }
+  return nodes;
+}
+
+function specsTable(specs) {
+  const rows = specs.map((s) => {
+    const value = el("td");
+    if (s.source === "missing") value.append(el("span", {class: "absent", textContent: s.value}));
+    else value.append(s.value);
+    if (s.source === "description") value.append(" ", el("span", {class: "src", textContent: "из описания", title: s.quote ?? ""}));
+    return el("tr", {}, el("td", {textContent: s.name}), value);
+  });
+  return el("table", {},
+    el("thead", {}, el("tr", {}, el("th", {textContent: "Характеристика"}), el("th", {textContent: "Значение"}))),
+    el("tbody", {}, ...rows));
+}
+
+function showCard(result) {
+  const {card, meta} = result;
+  const specsText = card.key_specs.map((s) => `${s.name}: ${s.value}`).join("\n");
+  const commercialText = "Кому подходит:\n" + card.commercial.target_audience.map((x) => "- " + x).join("\n") +
+    "\n\nКакие задачи решает:\n" + card.commercial.tasks.map((x) => "- " + x).join("\n");
+  const {markdown, ...plain} = result;
+  const status = result.status === "ready"
+    ? el("p", {class: "notice ok", textContent: "Автоматические проверки пройдены. Перед публикацией просмотрите текст."})
+    : null;
+  const commercial = el("div", {},
+    el("strong", {textContent: "Кому подходит"}), list(card.commercial.target_audience),
+    el("strong", {textContent: "Какие задачи решает"}), list(card.commercial.tasks));
+  const card_view = el("div", {},
+    block("SEO-заголовок", `${card.seo_title.length} / 70`, card.seo_title, el("div", {class: "text", textContent: card.seo_title})),
+    block("SEO-описание", `${card.seo_description.length} симв., норма 800–1200`, card.seo_description, el("div", {class: "text", textContent: card.seo_description})),
+    block("Ключевые характеристики", "", specsText, specsTable(card.key_specs)),
+    block("Поисковые запросы", "", card.search_queries.join("\n"), list(card.search_queries)),
+    block("Для менеджера", "", commercialText, commercial));
+  const mdView = el("div", {hidden: true}, el("div", {class: "block-head"}, el("span"), copyButton(() => markdown, "Копировать Markdown")), el("pre", {textContent: markdown}));
+  const jsonText = JSON.stringify(plain, null, 2);
+  const jsonView = el("div", {hidden: true}, el("div", {class: "block-head"}, el("span"), copyButton(() => jsonText, "Копировать JSON")), el("pre", {textContent: jsonText}));
+  const views = [["Карточка", card_view], ["Markdown", mdView], ["JSON", jsonView]];
+  const tabs = el("div", {class: "tabs", role: "tablist"});
+  views.forEach(([label, view], index) => {
+    const tab = el("button", {type: "button", role: "tab", textContent: label});
+    tab.setAttribute("aria-selected", index === 0);
+    tab.onclick = () => {
+      views.forEach(([, other]) => { other.hidden = other !== view; });
+      for (const t of tabs.children) t.setAttribute("aria-selected", t === tab);
+    };
+    tabs.append(tab);
+  });
+  const metaLine = el("p", {class: "meta", textContent: `Модель ${meta.model} · промпт ${meta.prompt_version} · попыток ${meta.attempts} · токенов ${meta.input_tokens + meta.output_tokens}`});
+  $("result").replaceChildren(...(status ? [status] : []), ...issuesNotice(result.missing_fields, result.issues), tabs, card_view, mdView, jsonView, metaLine);
+}
+
+function showCheck(report) {
+  const nodes = issuesNotice(report.missing_fields, report.issues);
+  $("result").replaceChildren(...(nodes.length ? nodes : [el("p", {class: "notice ok", textContent: "Всё необходимое заполнено"})]));
+}
+
+async function send(path, onSuccess, busy) {
+  const body = mode === "json" ? $("f-json").value : JSON.stringify(formToProduct());
+  const buttons = [$("generate"), $("check")];
+  buttons.forEach((b) => { b.disabled = true; });
+  $("result").replaceChildren(el("p", {class: "empty", textContent: busy}));
+  try {
+    const response = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body});
+    const data = await response.json().catch(() => null);
+    if (response.ok && data) onSuccess(data);
+    else showError(data?.error ?? {message: `Сервис вернул ошибку ${response.status}`});
+  } catch {
+    showError({message: "Нет связи с сервисом. Проверьте, что он запущен"});
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
+  }
+}
+
+$("tab-form").onclick = () => setMode("form");
+$("tab-json").onclick = () => setMode("json");
+$("add-spec").onclick = () => addRow();
+$("generate").onclick = () => send("/api/v1/cards", showCard, "Готовлю и проверяю черновик. Обычно это занимает до минуты…");
+$("check").onclick = () => send("/api/v1/check", showCheck, "Проверяю данные…");
+$("example").onclick = () => {
+  fillForm(EXAMPLE);
+  $("f-json").value = JSON.stringify(EXAMPLE, null, 2);
+};
+addRow();
+</script>
+</body>
+</html>
