@@ -11,8 +11,8 @@ def write(path, data):
 
 
 def env(monkeypatch, url, key="k"):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", key)
-    monkeypatch.setenv("ANTHROPIC_BASE_URL", url)
+    monkeypatch.setenv("OPENAI_API_KEY", key)
+    monkeypatch.setenv("OPENAI_BASE_URL", url)
     monkeypatch.setenv("LLM_MAX_RETRIES", "0")
 
 
@@ -46,9 +46,9 @@ def test_generate_llm_failure_exit_code(tmp_path, monkeypatch, dm02_input):
 
 def test_no_key(tmp_path, monkeypatch, capsys, dm02_input):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert main(["generate", write(tmp_path / "dm.json", dm02_input)]) == 1
-    assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+    assert "OPENAI_API_KEY" in capsys.readouterr().err
 
 
 def test_check_codes(tmp_path, capsys, dm02_input):

@@ -12,7 +12,7 @@ from cardgen.errors import (
     LlmTimeoutError,
     LlmUnavailableError,
 )
-from cardgen.llm import AnthropicClient
+from cardgen.llm import OpenAIClient
 from cardgen.schemas import LLM_JSON_SCHEMA
 
 MESSAGES = [{"role": "user", "content": "x"}]
@@ -21,30 +21,38 @@ MESSAGES = [{"role": "user", "content": "x"}]
 def client(stub, delays=None, **overrides):
     settings = Settings(api_key="secret-key", base_url=stub.url, **overrides)
     sleep = delays.append if delays is not None else (lambda _: None)
-    return AnthropicClient(settings, sleep=sleep)
+    return OpenAIClient(settings, sleep=sleep)
 
 
 def test_missing_key_is_a_config_error():
     with pytest.raises(ConfigError):
-        AnthropicClient(Settings(api_key=""))
+        OpenAIClient(Settings(api_key=""))
 
 
 def test_key_not_in_settings_repr():
     assert "secret-key" not in repr(Settings(api_key="secret-key"))
 
 
-def test_request_shape_and_thinking_block_handling():
-    with StubLlm([ok({"a": 1}, thinking=True)]) as stub:
+def test_request_shape():
+    with StubLlm([ok({"a": 1})]) as stub:
         response = client(stub, model="m").complete("sys", MESSAGES)
     sent = stub.requests[0]
-    assert sent["model"] == "m" and sent["system"] == "sys"
-    assert sent["output_config"]["format"]["schema"] == LLM_JSON_SCHEMA
-    # Новые модели отвечают 400 на принудительный tool_choice и нестандартную temperature.
-    assert "tool_choice" not in sent and "temperature" not in sent
-    assert stub.headers[0]["x-api-key"] == "secret-key"
+    assert sent["model"] == "m"
+    assert sent["messages"][0] == {"role": "developer", "content": "sys"}
+    assert sent["response_format"]["json_schema"]["strict"] is True
+    assert sent["response_format"]["json_schema"]["schema"] == LLM_JSON_SCHEMA
+    assert "max_completion_tokens" in sent and "max_tokens" not in sent
+    assert stub.headers[0]["authorization"] == "Bearer secret-key"
     assert response.data == {"a": 1}
-    assert response.raw_content[0]["type"] == "thinking"
     assert (response.input_tokens, response.output_tokens, response.request_id) == (10, 20, "req_stub")
+
+
+def test_exhausted_balance_is_not_retried():
+    body = {"error": {"code": "insufficient_quota", "message": "quota"}}
+    with StubLlm([fail(429, body=body)]) as stub:
+        with pytest.raises(LlmRateLimitError, match="баланс"):
+            client(stub).complete("s", MESSAGES)
+    assert len(stub.requests) == 1
 
 
 def test_schema_uses_only_supported_keywords():
@@ -66,7 +74,7 @@ def test_schema_uses_only_supported_keywords():
     walk(LLM_JSON_SCHEMA)
 
 
-@pytest.mark.parametrize("status", [429, 500, 503, 529])
+@pytest.mark.parametrize("status", [429, 500, 503])
 def test_transient_errors_are_retried(status):
     with StubLlm([fail(status), ok({"a": 1})]) as stub:
         response = client(stub, delays=[]).complete("s", MESSAGES)
@@ -83,7 +91,7 @@ def test_retry_after_is_honoured_and_capped():
 
 @pytest.mark.parametrize("status, error", [
     (429, LlmRateLimitError),
-    (529, LlmUnavailableError),
+    (503, LlmUnavailableError),
     (504, LlmTimeoutError),
 ])
 def test_retries_are_limited(status, error):
@@ -112,14 +120,14 @@ def test_html_error_body_does_not_crash():
 def test_network_failure_maps_to_unavailable():
     settings = Settings(api_key="k", base_url="http://127.0.0.1:9", max_retries=1)
     with pytest.raises(LlmUnavailableError):
-        AnthropicClient(settings, sleep=lambda _: None).complete("s", MESSAGES)
+        OpenAIClient(settings, sleep=lambda _: None).complete("s", MESSAGES)
 
 
 def test_refusal_and_truncation():
-    with StubLlm([ok("", stop_reason="refusal")]) as stub:
+    with StubLlm([ok("", refusal="нет")]) as stub:
         with pytest.raises(LlmRefusalError):
             client(stub).complete("s", MESSAGES)
-    with StubLlm([ok("{", stop_reason="max_tokens")]) as stub:
+    with StubLlm([ok("{", finish_reason="length")]) as stub:
         with pytest.raises(LlmOutputError, match="LLM_MAX_TOKENS"):
             client(stub).complete("s", MESSAGES)
 

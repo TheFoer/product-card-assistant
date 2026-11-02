@@ -1,4 +1,4 @@
-"""Клиент Anthropic Messages API: таймауты, повторы и понятные ошибки."""
+"""Клиент OpenAI Chat Completions API: таймауты, повторы и понятные ошибки."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 import random
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import requests
@@ -28,8 +28,7 @@ from cardgen.schemas import LLM_JSON_SCHEMA
 
 log = logging.getLogger(__name__)
 
-API_VERSION = "2023-06-01"
-RETRYABLE_STATUSES = {408, 409, 429, 500, 502, 503, 504, 529}
+RETRYABLE_STATUSES = {408, 409, 429, 500, 502, 503, 504}
 MAX_RETRY_DELAY_SECONDS = 30.0
 
 
@@ -37,8 +36,8 @@ MAX_RETRY_DELAY_SECONDS = 30.0
 class LlmResponse:
     # None, если текст ответа не удалось разобрать как JSON.
     data: dict[str, Any] | None
-    # Блоки ответа без изменений: при исправлении они возвращаются в диалог.
-    raw_content: list[dict[str, Any]] = field(default_factory=list)
+    # Текст ответа без изменений: при исправлении он возвращается в диалог.
+    raw_text: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
     request_id: str = ""
@@ -50,7 +49,7 @@ class LlmClient(Protocol):
     def complete(self, system: str, messages: list[dict[str, Any]]) -> LlmResponse: ...
 
 
-class AnthropicClient:
+class OpenAIClient:
     def __init__(
         self,
         settings: Settings,
@@ -59,7 +58,7 @@ class AnthropicClient:
     ) -> None:
         if not settings.api_key:
             raise ConfigError(
-                "Не задан ANTHROPIC_API_KEY. Скопируйте .env.example в .env и укажите ключ"
+                "Не задан OPENAI_API_KEY. Скопируйте .env.example в .env и укажите ключ"
             )
         self.model = settings.model
         self._settings = settings
@@ -69,10 +68,12 @@ class AnthropicClient:
     def complete(self, system: str, messages: list[dict[str, Any]]) -> LlmResponse:
         body = {
             "model": self.model,
-            "max_tokens": self._settings.max_tokens,
-            "system": system,
-            "messages": messages,
-            "output_config": {"format": {"type": "json_schema", "schema": LLM_JSON_SCHEMA}},
+            "max_completion_tokens": self._settings.max_tokens,
+            "messages": [{"role": "developer", "content": system}, *messages],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "product_card", "strict": True, "schema": LLM_JSON_SCHEMA},
+            },
         }
         attempts = self._settings.max_retries + 1
         for attempt in range(1, attempts + 1):
@@ -94,11 +95,10 @@ class AnthropicClient:
     def _send(self, body: dict[str, Any]) -> requests.Response:
         try:
             response = self._session.post(
-                f"{self._settings.base_url}/v1/messages",
+                f"{self._settings.base_url}/v1/chat/completions",
                 headers={
-                    "x-api-key": self._settings.api_key,
-                    "anthropic-version": API_VERSION,
-                    "content-type": "application/json",
+                    "Authorization": f"Bearer {self._settings.api_key}",
+                    "Content-Type": "application/json",
                 },
                 json=body,
                 timeout=(10, self._settings.timeout_seconds),
@@ -119,17 +119,21 @@ class AnthropicClient:
     @staticmethod
     def _raise_for_status(response: requests.Response) -> None:
         status = response.status_code
-        request_id = response.headers.get("request-id", "")
+        request_id = response.headers.get("x-request-id", "")
         try:
             error = response.json().get("error", {})
             detail = str(error.get("message", ""))[:300]
+            error_code = str(error.get("code", ""))
         except (ValueError, AttributeError):
-            detail = ""
+            detail = error_code = ""
         log.error("LLM HTTP %s, request_id=%s: %s", status, request_id, detail)
         suffix = f" (request_id: {request_id})" if request_id else ""
 
         if status in (401, 403):
-            raise LlmAuthError("Сервис LLM отклонил ключ API: проверьте ANTHROPIC_API_KEY" + suffix)
+            raise LlmAuthError("Сервис LLM отклонил ключ API: проверьте OPENAI_API_KEY" + suffix)
+        if error_code == "insufficient_quota":
+            # Закончившийся баланс повторами не лечится.
+            raise LlmRateLimitError("На счёте OpenAI закончились средства: пополните баланс" + suffix)
         if status in RETRYABLE_STATUSES:
             final: LlmError
             if status == 429:
@@ -143,27 +147,20 @@ class AnthropicClient:
 
     @staticmethod
     def _parse(response: requests.Response) -> LlmResponse:
-        request_id = response.headers.get("request-id", "")
         try:
             payload = response.json()
-            content = payload["content"]
-            if not isinstance(content, list):
-                raise TypeError
-        except (ValueError, KeyError, TypeError):
+            choice = payload["choices"][0]
+            message = choice["message"]
+        except (ValueError, KeyError, IndexError, TypeError):
             raise LlmOutputError("Сервис LLM вернул ответ неожиданного формата") from None
 
-        stop_reason = payload.get("stop_reason")
-        if stop_reason == "refusal":
+        finish_reason = choice.get("finish_reason")
+        if message.get("refusal") or finish_reason == "content_filter":
             raise LlmRefusalError("Модель отказалась обрабатывать эти данные")
-        if stop_reason == "max_tokens":
+        if finish_reason == "length":
             raise LlmOutputError("Ответ модели обрезан: увеличьте LLM_MAX_TOKENS")
 
-        # Перед текстом могут идти блоки thinking, поэтому ищем текст по типу, а не по индексу.
-        text = "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
+        text = message.get("content") or ""
         data: dict[str, Any] | None
         try:
             parsed = json.loads(text)
@@ -174,10 +171,10 @@ class AnthropicClient:
         usage = payload.get("usage") or {}
         return LlmResponse(
             data=data,
-            raw_content=content,
-            input_tokens=int(usage.get("input_tokens") or 0),
-            output_tokens=int(usage.get("output_tokens") or 0),
-            request_id=request_id,
+            raw_text=text,
+            input_tokens=int(usage.get("prompt_tokens") or 0),
+            output_tokens=int(usage.get("completion_tokens") or 0),
+            request_id=response.headers.get("x-request-id", ""),
         )
 
 

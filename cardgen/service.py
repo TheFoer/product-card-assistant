@@ -45,7 +45,7 @@ class CardGenerator:
             if card is not None and not problems:
                 break
             messages += [
-                {"role": "assistant", "content": response.raw_content},
+                {"role": "assistant", "content": response.raw_text},
                 {"role": "user", "content": build_repair_prompt(problems)},
             ]
 

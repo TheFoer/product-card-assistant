@@ -63,8 +63,8 @@ def _string_list(description: str) -> dict[str, Any]:
     return {"type": "array", "items": {"type": "string"}, "description": description}
 
 
-# Подмножество JSON Schema, которое принимает output_config.format:
-# без minLength/maxLength и т. п. Эти ограничения проверяет factcheck.
+# Схема для строгого режима Structured Outputs: все поля обязательны,
+# лишние запрещены. Длины и количество элементов проверяет factcheck.
 LLM_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,

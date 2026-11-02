@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from cardgen.analysis import parse_json, parse_product, preflight
 from cardgen.config import Settings
 from cardgen.errors import CardGenError
-from cardgen.llm import AnthropicClient
+from cardgen.llm import OpenAIClient
 from cardgen.service import CardGenerator
 
 EXIT_OK, EXIT_FAILED, EXIT_BAD_INPUT = 0, 1, 2
@@ -49,7 +49,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 def _cmd_generate(args: argparse.Namespace) -> int:
     settings = Settings.from_env()
-    generator = CardGenerator(AnthropicClient(settings), settings.max_repairs)
+    generator = CardGenerator(OpenAIClient(settings), settings.max_repairs)
     code = EXIT_OK
     for path in args.files:
         try:

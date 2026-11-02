@@ -24,7 +24,7 @@ def test_form_and_health():
 
 
 def test_form_warns_without_key():
-    assert "ANTHROPIC_API_KEY" in client_for(api_key="").get("/").get_data(as_text=True)
+    assert "OPENAI_API_KEY" in client_for(api_key="").get("/").get_data(as_text=True)
 
 
 def test_generate(dm02_input, dm02_response):
@@ -77,7 +77,7 @@ def test_missing_key_on_generate(dm02_input):
 @pytest.mark.parametrize("llm_status, status, code", [
     (401, 502, "llm_auth_failed"),
     (429, 503, "llm_rate_limited"),
-    (529, 503, "llm_unavailable"),
+    (503, 503, "llm_unavailable"),
     (400, 502, "llm_request_rejected"),
 ])
 def test_llm_errors_are_mapped(dm02_input, llm_status, status, code):

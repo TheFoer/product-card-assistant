@@ -58,7 +58,7 @@ pre{background:var(--code);padding:12px;border-radius:6px;overflow:auto;font-siz
 <main>
 <section class="panel" aria-label="Данные о товаре">
   {% if not llm_configured %}
-  <p class="notice warn">Не задан ANTHROPIC_API_KEY. Проверка данных работает, а для создания карточки укажите ключ в файле .env и перезапустите сервис.</p>
+  <p class="notice warn">Не задан OPENAI_API_KEY. Проверка данных работает, а для создания карточки укажите ключ в файле .env и перезапустите сервис.</p>
   {% endif %}
   <div class="tabs" role="tablist">
     <button type="button" role="tab" id="tab-form" aria-selected="true">Форма</button>

@@ -13,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 from cardgen.analysis import parse_json, parse_product, preflight
 from cardgen.config import Settings
 from cardgen.errors import CardGenError
-from cardgen.llm import AnthropicClient
+from cardgen.llm import OpenAIClient
 from cardgen.service import CardGenerator
 
 log = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def create_app(
     settings = settings or Settings.from_env()
 
     def default_factory() -> CardGenerator:
-        return CardGenerator(AnthropicClient(settings), settings.max_repairs)
+        return CardGenerator(OpenAIClient(settings), settings.max_repairs)
 
     factory = generator_factory or default_factory
 

@@ -4,14 +4,14 @@ from stub_llm import StubLlm, ok
 from cardgen.analysis import parse_product
 from cardgen.config import Settings
 from cardgen.errors import LlmOutputError
-from cardgen.llm import AnthropicClient
+from cardgen.llm import OpenAIClient
 from cardgen.prompts import build_user_prompt
 from cardgen.schemas import MISSING_MARK
 from cardgen.service import CardGenerator
 
 
 def generator(stub, max_repairs=2):
-    llm = AnthropicClient(Settings(api_key="k", base_url=stub.url, model="m"), sleep=lambda _: None)
+    llm = OpenAIClient(Settings(api_key="k", base_url=stub.url, model="m"), sleep=lambda _: None)
     return CardGenerator(llm, max_repairs)
 
 
@@ -27,14 +27,15 @@ def test_happy_path(dm02_input, dm02_response):
     assert result.card.seo_title in result.markdown
 
 
-def test_repair_loop_sends_issues_and_keeps_thinking(dm02_input, dm02_response):
+def test_repair_loop_sends_issues(dm02_input, dm02_response):
     bad = {**dm02_response, "seo_title": "Манометр DM 02 со степенью защиты IP65"}
-    with StubLlm([ok(bad, thinking=True), ok(dm02_response)]) as stub:
+    with StubLlm([ok(bad), ok(dm02_response)]) as stub:
         result = generator(stub).generate(parse_product(dm02_input))
     assert result.status == "ready" and result.meta.attempts == 2
     second = stub.requests[1]["messages"]
-    assert second[1]["role"] == "assistant" and second[1]["content"][0]["type"] == "thinking"
-    assert second[2]["role"] == "user" and "IP65" in second[2]["content"]
+    assert second[0]["role"] == "developer"
+    assert second[2]["role"] == "assistant" and "IP65" in second[2]["content"]
+    assert second[3]["role"] == "user" and "IP65" in second[3]["content"]
     assert result.meta.input_tokens == 20
 
 

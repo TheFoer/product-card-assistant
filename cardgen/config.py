@@ -26,8 +26,8 @@ def _int(env: Mapping[str, str], name: str, default: int, minimum: int) -> int:
 class Settings:
     # repr=False: ключ не попадёт в логи и трассировки при выводе настроек.
     api_key: str = field(default="", repr=False)
-    base_url: str = "https://api.anthropic.com"
-    model: str = "claude-sonnet-5-5"
+    base_url: str = "https://api.openai.com"
+    model: str = "gpt-6.1-sol"
     max_tokens: int = 8000
     timeout_seconds: int = 120
     max_retries: int = 3
@@ -38,8 +38,8 @@ class Settings:
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
         env = os.environ if env is None else env
         return cls(
-            api_key=env.get("ANTHROPIC_API_KEY", "").strip(),
-            base_url=(env.get("ANTHROPIC_BASE_URL", "").strip() or cls.base_url).rstrip("/"),
+            api_key=env.get("OPENAI_API_KEY", "").strip(),
+            base_url=(env.get("OPENAI_BASE_URL", "").strip() or cls.base_url).rstrip("/"),
             model=env.get("LLM_MODEL", "").strip() or cls.model,
             max_tokens=_int(env, "LLM_MAX_TOKENS", cls.max_tokens, 1000),
             timeout_seconds=_int(env, "LLM_TIMEOUT_SECONDS", cls.timeout_seconds, 1),

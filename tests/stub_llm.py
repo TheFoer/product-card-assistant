@@ -1,4 +1,4 @@
-"""Локальный HTTP-сервер вместо Anthropic API. Клиент проверяется по настоящему HTTP."""
+"""Локальный HTTP-сервер вместо OpenAI API. Клиент проверяется по настоящему HTTP."""
 
 from __future__ import annotations
 
@@ -8,19 +8,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 
-def ok(data: Any, *, thinking: bool = False, stop_reason: str = "end_turn") -> dict[str, Any]:
-    content: list[dict[str, Any]] = []
-    if thinking:
-        content.append({"type": "thinking", "thinking": "...", "signature": "sig"})
+def ok(data: Any, *, finish_reason: str = "stop", refusal: str | None = None) -> dict[str, Any]:
     text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
-    content.append({"type": "text", "text": text})
     return {
         "status": 200,
-        "headers": {"request-id": "req_stub"},
+        "headers": {"x-request-id": "req_stub"},
         "body": {
-            "content": content,
-            "stop_reason": stop_reason,
-            "usage": {"input_tokens": 10, "output_tokens": 20},
+            "choices": [{
+                "message": {"role": "assistant", "content": text, "refusal": refusal},
+                "finish_reason": finish_reason,
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20},
         },
     }
 
@@ -30,7 +28,7 @@ def fail(status: int, headers: dict[str, str] | None = None, body: Any = None) -
         "status": status,
         "headers": headers or {},
         "body": body if body is not None else {
-            "type": "error", "error": {"type": "stub", "message": f"stub {status}"},
+            "error": {"type": "stub", "code": "stub", "message": f"stub {status}"},
         },
     }
 
